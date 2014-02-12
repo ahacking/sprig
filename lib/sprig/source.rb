@@ -1,6 +1,8 @@
 module Sprig
   class Source
 
+    class ParserError < StandardError; end
+
     def initialize(table_name, args = {})
       @table_name = table_name
       @args       = args
@@ -14,6 +16,18 @@ module Sprig
       data[:options] || {}
     end
 
+    def directory
+      @directory ||= Rails.root.join(base_directory, environment)
+    end
+
+    def base_directory
+      args.fetch(:base_directory, seed_base)
+    end
+
+    def environment
+      args.fetch(:environment, sprig_environment)
+    end
+
     private
 
     attr_reader :table_name, :args
@@ -21,6 +35,12 @@ module Sprig
     def data
       @data ||= begin
         parser_class.new(source).parse.to_hash.with_indifferent_access
+      rescue => e
+        if source.respond_to?(:path) && (path = source.path)
+          raise ParserError, "#{path}: #{e}"
+        else
+          raise
+        end
       ensure
         source.close
       end
@@ -51,7 +71,7 @@ module Sprig
     end
 
     def default_source
-      File.open(SourceDeterminer.new(table_name).file)
+      File.open(SourceDeterminer.new(table_name, directory).file)
     end
 
     def default_parser_class
@@ -61,13 +81,15 @@ module Sprig
 
     class SourceDeterminer
       attr_reader :table_name
+      attr_reader :directory
 
-      def initialize(table_name)
+      def initialize(table_name, directory)
         @table_name = table_name
+        @directory = directory
       end
 
       def file
-        File.new(seed_directory.join(filename))
+        File.new(@directory.join(filename))
       end
 
       private
@@ -79,14 +101,14 @@ module Sprig
       end
 
       def available_files
-        Dir.entries(seed_directory)
+        Dir.entries(directory)
       end
 
       def file_not_found
         raise FileNotFoundError,
           "No datasource file could be found for '#{table_name}'. Try creating "\
           "#{table_name}.yml, #{table_name}.json, or #{table_name}.csv within "\
-          "#{seed_directory}, or define a custom datasource."
+          "#{directory}, or define a custom datasource."
       end
     end
 

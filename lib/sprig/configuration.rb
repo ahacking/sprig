@@ -1,16 +1,23 @@
 module Sprig
   class Configuration
 
+    attr_writer :base_directory
+
+    attr_writer :environment
+
     attr_writer :directory
 
+
     def directory
-      Rails.root.join(@directory || default_directory, Rails.env)
+      Rails.root.join(base_directory, environment)
     end
 
-    private
+    def base_directory
+      @base_directory || 'db/seeds'
+    end
 
-    def default_directory
-      'db/seeds'
+    def environment
+      @environment || Rails.env
     end
   end
 end

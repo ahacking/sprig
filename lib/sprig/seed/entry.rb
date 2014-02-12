@@ -1,28 +1,32 @@
 module Sprig
   module Seed
     class Entry
-      def initialize(klass, attrs, options)
-        self.klass = klass
-        attrs = attrs.to_hash.with_indifferent_access
-        self.sprig_id = attrs.delete(:sprig_id) || SecureRandom.uuid
-        @attributes = AttributeCollection.new(attrs)
-        @options = options
-      end
 
-      def dependencies
-        @dependencies ||= attributes.map do |attribute|
-          attribute.dependencies
-        end.flatten.uniq
+      COMPUTED_VALUE_REGEX = /<%[=]?(.*)%>/
+
+      def initialize(factory, attrs)
+        @factory = factory
+        self.sprig_id = attrs.delete(:sprig_id) || attrs.delete('sprig_id') || SecureRandom.uuid
+        @attributes = attrs
       end
 
       def dependency_id
         @dependency_id ||= Dependency.for(klass, sprig_id).id
       end
 
+      def dependencies
+        unless @dependencies
+          @dependencies = []
+          scan_dependencies(@attributes)
+          @dependencies.uniq!
+        end
+        @dependencies
+      end
+
       def before_save
         # TODO: make these filters take chains like rails before_filters
-        if options[:delete_existing_by]
-          klass.delete_all(options[:delete_existing_by] => attributes.find_by_name(options[:delete_existing_by]).value)
+        if (keys = options[:delete_existing_by])
+          klass.delete_all(conditions(keys))
         end
       end
 
@@ -31,7 +35,7 @@ module Sprig
       end
 
       def save_to_store
-        SprigRecordStore.instance.save(record.orm_record, sprig_id)
+        SprigRecordStore.instance.save(klass, sprig_id, record)
       end
 
       def success_log_text
@@ -46,34 +50,79 @@ module Sprig
         @record ||= new_or_existing_record
       end
 
-      private
-
-      attr_reader :attributes, :klass, :options, :sprig_id
-
-      def klass=(klass)
-        raise ArgumentError, 'First argument must be a Class' unless klass.is_a?(Class)
-
-        @klass = klass
+      def klass
+        factory.klass
       end
+
+      def options
+        factory.options
+      end
+
+      attr_reader :factory, :attributes, :sprig_id
+
+      private
 
       def sprig_id=(sprig_id)
         @sprig_id = sprig_id.to_s
       end
 
-      def new_or_existing_record
-        if options[:find_existing_by]
-          Record.new_or_existing(klass, attributes, find_existing_params)
-        else
-          Record.new(klass, attributes)
+      def scan_dependencies(value)
+        case value
+        when Array
+          value.each { |item| scan_dependencies(item) }
+        when Hash
+          value.values.each { |item| scan_dependencies(item) }
+        when String
+          # ERB style embedded value?
+          if (matched = COMPUTED_VALUE_REGEX.match(value))
+            # detect and accumulate dependencies
+            matched[1].scan(/(sprig_record\(([A-Z][^,]*), ([\d]*)\))+/).each { |dep_match|
+              # add dependency for klass and sprig_id
+              @dependencies << Dependency.for(dep_match[1], dep_match[2])
+            }
+          end
         end
       end
 
-      def find_existing_params
-        Array(options[:find_existing_by]).inject({}) do |hash, attribute_name|
-          hash.merge!(
-            { attribute_name => attributes.find_by_name(attribute_name).value }
-          )
+      def resolved_attributes
+        @resolved_attributes ||= resolve_computed(@attributes)
+      end
+
+      def resolve_computed(value)
+        case value
+        when Array
+          value.each_with_index { |item,index| value[index] = resolve_computed(item) }
+        when Hash
+          value.each { |name,item| value[name] = resolve_computed(item) }
+        when String
+          # evaluate any computed values
+          if (matched = COMPUTED_VALUE_REGEX.match(value))
+            value = factory.instance_eval(matched[1])
+          end
         end
+        value
+      end
+
+      def new_or_existing_record
+        if (keys = options[:find_existing_by]) && (rec = klass.where(conditions(keys)).first)
+          resolved_attributes.each { |name,value| rec.send(:"#{name}=", value) }
+          rec
+        else
+          klass.new(resolved_attributes)
+        end
+      end
+
+      def assign_attributes
+        resolved_attributes.each do |attribute|
+          orm_record.send(:"#{attribute.name}=", attribute.value)
+        end
+      end
+
+      def conditions(keys)
+        keys = Array(keys)
+        conditions = resolved_attributes.slice(*keys)
+        raise AttributeNotFoundError, "Missing attributes: #{keys - conditions.keys}." unless conditions.count == keys.count
+        conditions
       end
     end
   end

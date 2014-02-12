@@ -16,7 +16,7 @@ module Sprig
 
     def log_error(seed)
       message = seed.error_log_text
-      @errors << seed.record
+      @errors << seed
       puts red(message)
       @error_count += 1
     end
@@ -33,8 +33,8 @@ module Sprig
       if @error_count > 0
         puts red(error_summary)
 
-        @errors.each do |error|
-          puts red("#{error}\n#{error.errors.messages}\n\n")
+        @errors.each do |seed|
+          puts red("#{seed.record.to_hash}\n#{seed.record.errors.messages}\n\n")
         end
       end
     end

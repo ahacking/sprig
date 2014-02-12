@@ -4,8 +4,13 @@ module Sprig
       Sprig.configuration.directory
     end
 
+    def seed_base
+      Sprig.configuration.base_directory
+    end
+
     def sprig_environment
-      Rails.env #TODO: make customizable
+      # FIXME use record environment
+      Sprig.configuration.environment
     end
 
     def sprig(directive_definitions)
@@ -19,7 +24,8 @@ module Sprig
     end
 
     def sprig_file(relative_path)
-      File.new(seed_directory.join('files', relative_path))
+      # FIXME use record seed_directory
+      File.new(seed_base.join(relative_path))
     end
   end
 end

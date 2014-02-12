@@ -7,10 +7,8 @@ module Sprig
         case
         when args.is_a?(Hash)
           args
-        when args < ActiveRecord::Base
-          { :class => args }
         else
-          raise ArgumentError, argument_error_message
+          { :class => args }
         end
       end
     end
