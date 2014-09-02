@@ -24,7 +24,6 @@ module Sprig
     end
 
     def sprig_file(relative_path)
-      # FIXME use record seed_directory
       File.new(seed_base.join(relative_path))
     end
   end

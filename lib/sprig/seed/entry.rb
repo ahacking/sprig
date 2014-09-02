@@ -4,6 +4,9 @@ module Sprig
 
       COMPUTED_VALUE_REGEX = /<%[=]?(.*)%>/
 
+      # handle literal id or single/double quoted id uniformly
+      SPRIG_RECORD_REGEX = /(?:sprig_record\(([A-Z][^,\s]*)\s*,\s*(?:([^"'\s)]+)|"([^"]*)"|'([^']*)')\s*\))+/
+
       def initialize(factory, attrs)
         @factory = factory
         self.sprig_id = attrs.delete(:sprig_id) || attrs.delete('sprig_id') || SecureRandom.uuid
@@ -75,10 +78,10 @@ module Sprig
         when String
           # ERB style embedded value?
           if (matched = COMPUTED_VALUE_REGEX.match(value))
-            # detect and accumulate dependencies
-            matched[1].scan(/(sprig_record\(([A-Z][^,]*), ([\d]*)\))+/).each { |dep_match|
+            # detect and accumulate dependencies, match word, or single/double quoted string
+            matched[1].scan(SPRIG_RECORD_REGEX).each { |dep_match|
               # add dependency for klass and sprig_id
-              @dependencies << Dependency.for(dep_match[1], dep_match[2])
+              @dependencies << Dependency.for(dep_match[0], (dep_match[1]||dep_match[2]||dep_match[3]))
             }
           end
         end
