@@ -5,11 +5,13 @@ module Sprig
     end
 
     def sprig
-      dependency_sorted_seeds.each do |seed|
-        plant(seed)
+      begin
+        dependency_sorted_seeds.each do |seed|
+          plant(seed)
+        end
+      ensure
+        logger.log_summary
       end
-
-      logger.log_summary
     end
 
     private
