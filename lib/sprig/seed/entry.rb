@@ -46,7 +46,7 @@ module Sprig
       end
 
       def error_log_text
-        "There was an error saving #{klass.name} with sprig_id #{sprig_id}."
+        "There was an error saving #{klass.name} with sprig_id #{sprig_id}.\nErrors:\n#{@record.errors.messages}"
       end
 
       def record
